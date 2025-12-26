@@ -1,0 +1,18 @@
+{
+  "user_id": "USER_001",
+  "timestamp": "2025-12-26T19:13:14.828510",
+  "fake_probability": 0.8571428571428572,
+  "decision": "FAKE_WORK (HIGH CONFIDENCE)",
+  "confidence": "HIGH",
+  "reasons": [
+    "Excessive key repetition (0.71)",
+    "Suspicious activity spike (1.00)"
+  ],
+  "feature_scores": {
+    "keystroke_entropy": 0.863120568566631,
+    "mouse_curvature": 1.0,
+    "shortcut_abuse_score": 0.0,
+    "activity_spike_score": 1.0,
+    "periodic_behavior_score": 0.0
+  }
+}

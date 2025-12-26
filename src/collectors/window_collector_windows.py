@@ -1,0 +1,159 @@
+"""
+Windows-specific window collector implementation
+Uses pywin32 and psutil for Windows API access
+"""
+
+import time
+from datetime import datetime
+from collections import deque
+from typing import List, Dict, Any
+import threading
+
+try:
+    import win32gui
+    import win32process
+    import psutil
+    WINDOWS_LIBS_AVAILABLE = True
+except ImportError:
+    WINDOWS_LIBS_AVAILABLE = False
+
+from ..utils.logger import setup_logger
+from ..utils.config import LOG_LEVEL, LOG_FILE
+
+logger = setup_logger(__name__, LOG_FILE, LOG_LEVEL)
+
+
+class WindowsWindowCollector:
+    """Windows-specific window tracking implementation"""
+    
+    def __init__(self, poll_interval: float = 1.0, buffer_size: int = 1000):
+        """
+        Initialize Windows window collector
+        
+        Args:
+            poll_interval: How often to check active window (seconds)
+            buffer_size: Maximum number of events to store
+        """
+        if not WINDOWS_LIBS_AVAILABLE:
+            raise ImportError("Windows-specific libraries (pywin32, psutil) not available")
+        
+        self.poll_interval = poll_interval
+        self.buffer_size = buffer_size
+        self.events = deque(maxlen=buffer_size)
+        self.is_running = False
+        self.lock = threading.Lock()
+        self.thread = None
+        self.last_window = None
+        
+        logger.info(f"WindowsWindowCollector initialized (poll interval: {poll_interval}s)")
+    
+    def _get_active_window_info(self) -> Dict[str, Any]:
+        """Get information about the currently active window"""
+        try:
+            # Get active window handle
+            hwnd = win32gui.GetForegroundWindow()
+            
+            # Get window title
+            window_title = win32gui.GetWindowText(hwnd)
+            
+            # Get process ID
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            
+            # Get process name
+            try:
+                process = psutil.Process(pid)
+                process_name = process.name()
+                process_exe = process.exe()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                process_name = "Unknown"
+                process_exe = "Unknown"
+            
+            return {
+                'window_title': window_title,
+                'process_name': process_name,
+                'process_exe': process_exe,
+                'pid': pid,
+            }
+        except Exception as e:
+            logger.error(f"Error getting active window info: {e}")
+            return None
+    
+    def _poll_loop(self):
+        """Background thread that polls for active window changes"""
+        logger.info("Window polling started (Windows)")
+        
+        while self.is_running:
+            try:
+                window_info = self._get_active_window_info()
+                
+                if window_info:
+                    # Check if window changed
+                    current_window = (
+                        window_info['window_title'],
+                        window_info['process_name']
+                    )
+                    
+                    if current_window != self.last_window:
+                        event = {
+                            'timestamp': datetime.now(),
+                            'event_type': 'window_change',
+                            **window_info
+                        }
+                        
+                        with self.lock:
+                            self.events.append(event)
+                        
+                        self.last_window = current_window
+                        logger.debug(f"Window changed to: {window_info['window_title']}")
+                
+                time.sleep(self.poll_interval)
+                
+            except Exception as e:
+                logger.error(f"Error in window poll loop: {e}")
+                time.sleep(self.poll_interval)
+    
+    def start(self):
+        """Start tracking window changes"""
+        if self.is_running:
+            logger.warning("WindowsWindowCollector is already running")
+            return
+        
+        self.is_running = True
+        self.thread = threading.Thread(target=self._poll_loop, daemon=True)
+        self.thread.start()
+        logger.info("WindowsWindowCollector started")
+    
+    def stop(self):
+        """Stop tracking window changes"""
+        if not self.is_running:
+            logger.warning("WindowsWindowCollector is not running")
+            return
+        
+        self.is_running = False
+        if self.thread:
+            self.thread.join(timeout=2.0)
+        logger.info("WindowsWindowCollector stopped")
+    
+    def get_events(self, clear: bool = False) -> List[Dict[str, Any]]:
+        """Get collected events"""
+        with self.lock:
+            events = list(self.events)
+            if clear:
+                self.events.clear()
+        return events
+    
+    def get_events_in_window(self, window_seconds: int) -> List[Dict[str, Any]]:
+        """Get events within a time window"""
+        now = datetime.now()
+        with self.lock:
+            events = [
+                event for event in self.events
+                if (now - event['timestamp']).total_seconds() <= window_seconds
+            ]
+        return events
+    
+    def clear_buffer(self):
+        """Clear the event buffer"""
+        with self.lock:
+            self.events.clear()
+        logger.debug("Window event buffer cleared")
