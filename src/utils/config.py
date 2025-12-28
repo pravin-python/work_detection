@@ -50,11 +50,11 @@ MIN_EVENTS_FOR_ANALYSIS = 5  # Minimum events needed to compute features
 
 # Detection Thresholds (Rule-Based)
 RULE_THRESHOLDS = {
-    'repeat_key_ratio': 0.7,  # >70% same key = suspicious
-    'mouse_linearity': 0.95,  # >95% linear movement = bot
-    'shortcut_abuse_ratio': 0.5,  # >50% shortcuts = suspicious
-    'idle_spike_threshold': 0.8,  # Activity spike near idle timeout
-    'zero_entropy_threshold': 0.1,  # Very low entropy = bot
+    'repeat_key_ratio': 0.8,  # >80% same key = suspicious (increased from 0.7)
+    'mouse_linearity': 0.98,  # >98% linear movement = bot (increased from 0.95)
+    'shortcut_abuse_ratio': 0.6,  # >60% shortcuts = suspicious (increased from 0.5)
+    'idle_spike_threshold': 0.85,  # Activity spike near idle timeout (increased from 0.8)
+    'zero_entropy_threshold': 0.05,  # Very low entropy = bot (decreased from 0.1 - stricter)
 }
 
 # ML Model Settings
@@ -92,10 +92,14 @@ IFOREST_PARAMS = {
 # Real-time Detection Settings
 REALTIME_WINDOW_SECONDS = 60  # Analyze every 60 seconds
 CONFIDENCE_THRESHOLDS = {
-    'HIGH': 0.8,  # >80% probability
-    'MEDIUM': 0.5,  # 50-80% probability
-    'LOW': 0.0  # <50% probability
+    'HIGH': 0.85,  # >85% probability (increased for better accuracy)
+    'MEDIUM': 0.6,  # 60-85% probability (increased from 0.5)
+    'LOW': 0.0  # <60% probability
 }
+
+# ML Detection Settings
+ML_DETECTION_THRESHOLD = 0.6  # Minimum probability to classify as fake (increased from 0.5)
+MIN_ACTIVITY_FOR_ANALYSIS = 10  # Minimum events needed before analysis (reduces false positives)
 
 # Decision Labels
 DECISION_LABELS = {

@@ -22,6 +22,9 @@ scikit-learn==1.3.2
 xgboost==2.0.3
 joblib==1.3.2
 
+# Deep Learning (Neural Networks)
+tensorflow==2.15.0
+
 # Visualization (Cross-platform)
 matplotlib==3.8.2
 seaborn==0.13.0

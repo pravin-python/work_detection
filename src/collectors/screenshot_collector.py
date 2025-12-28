@@ -46,21 +46,30 @@ class ScreenshotCollector:
         interval: int = SCREENSHOT_INTERVAL_SECONDS,
         buffer_size: int = SCREENSHOT_BUFFER_SIZE,
         quality: int = SCREENSHOT_QUALITY,
-        enabled: bool = ENABLE_SCREENSHOTS
+        enabled: bool = ENABLE_SCREENSHOTS,
+        random_interval: bool = True,
+        min_interval: int = 30,
+        max_interval: int = 90
     ):
         """
         Initialize screenshot collector
         
         Args:
-            interval: Seconds between screenshots (default: 60)
+            interval: Base seconds between screenshots (default: 60)
             buffer_size: Number of screenshots to keep in buffer (default: 10)
             quality: JPEG quality for compression (1-100, default: 85)
             enabled: Whether screenshot capture is enabled
+            random_interval: Use random intervals instead of fixed (default: True)
+            min_interval: Minimum seconds between screenshots (default: 30)
+            max_interval: Maximum seconds between screenshots (default: 90)
         """
         self.interval = interval
         self.buffer_size = buffer_size
         self.quality = quality
         self.enabled = enabled
+        self.random_interval = random_interval
+        self.min_interval = min_interval
+        self.max_interval = max_interval
         
         self.screenshots = deque(maxlen=buffer_size)
         self.is_running = False
@@ -75,16 +84,15 @@ class ScreenshotCollector:
         if not self.enabled:
             logger.info("Screenshot capture is DISABLED")
         else:
-            try:
-                self.sct = mss.mss()
-                logger.info(f"ScreenshotCollector initialized (interval: {interval}s, buffer: {buffer_size})")
-            except Exception as e:
-                logger.error(f"Failed to initialize screenshot capture: {e}")
-                self.enabled = False
+            # Don't create mss instance here - create it in the thread to avoid threading issues
+            logger.info(f"ScreenshotCollector initialized (interval: {interval}s, buffer: {buffer_size})")
     
-    def capture_screenshot(self) -> Optional[Dict[str, Any]]:
+    def capture_screenshot(self, sct_instance=None) -> Optional[Dict[str, Any]]:
         """
         Capture current screen
+        
+        Args:
+            sct_instance: Optional mss instance (creates new one if None)
         
         Returns:
             Dictionary with timestamp, image, and metadata
@@ -94,9 +102,13 @@ class ScreenshotCollector:
             return None
         
         try:
+            # Create mss instance if not provided (for thread safety)
+            if sct_instance is None:
+                sct_instance = mss.mss()
+            
             # Capture primary monitor
-            monitor = self.sct.monitors[1]  # Monitor 1 is primary
-            screenshot = self.sct.grab(monitor)
+            monitor = sct_instance.monitors[1]  # Monitor 1 is primary
+            screenshot = sct_instance.grab(monitor)
             
             # Convert to PIL Image
             img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
@@ -114,22 +126,44 @@ class ScreenshotCollector:
     
     def _capture_loop(self):
         """Background thread that captures screenshots periodically"""
-        logger.info(f"Screenshot capture started (interval: {self.interval}s)")
+        if self.random_interval:
+            logger.info(f"Screenshot capture started (random interval: {self.min_interval}-{self.max_interval}s)")
+        else:
+            logger.info(f"Screenshot capture started (interval: {self.interval}s)")
+        
+        import random
+        
+        # Create mss instance in this thread to avoid threading issues
+        try:
+            sct = mss.mss()
+        except Exception as e:
+            logger.error(f"Failed to create mss instance in thread: {e}")
+            self.enabled = False
+            return
         
         while self.is_running:
             try:
-                screenshot = self.capture_screenshot()
+                # Pass the thread-local mss instance
+                screenshot = self.capture_screenshot(sct_instance=sct)
                 
                 if screenshot:
                     with self.lock:
                         self.screenshots.append(screenshot)
                     logger.debug(f"Screenshot captured ({len(self.screenshots)}/{self.buffer_size} in buffer)")
                 
+                # Calculate next interval (random or fixed)
+                if self.random_interval:
+                    next_interval = random.uniform(self.min_interval, self.max_interval)
+                    logger.debug(f"Next screenshot in {next_interval:.1f}s (random)")
+                else:
+                    next_interval = self.interval
+                
                 # Wait for next interval
-                time.sleep(self.interval)
+                time.sleep(next_interval)
                 
             except Exception as e:
                 logger.error(f"Error in screenshot capture loop: {e}")
+                # Use fixed interval on error
                 time.sleep(self.interval)
     
     def start(self):

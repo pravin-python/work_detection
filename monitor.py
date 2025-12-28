@@ -11,7 +11,7 @@ from pathlib import Path
 
 from src.collectors.unified_collector import UnifiedCollector
 from src.features.feature_extractor import FeatureExtractor
-from src.detection.rule_based import RuleBasedDetector
+from src.detection.ml_detector import MLDetector
 from src.utils.logger import setup_logger
 from src.utils.config import (
     LOG_LEVEL, LOG_FILE, 
@@ -54,7 +54,8 @@ class RealtimeMonitor:
         # Initialize components
         self.collector = UnifiedCollector()
         self.extractor = FeatureExtractor()
-        self.detector = RuleBasedDetector()
+        # Use ML detector (neural network) for better accuracy
+        self.detector = MLDetector()
         
         # Statistics
         self.total_analyses = 0
@@ -106,16 +107,32 @@ class RealtimeMonitor:
     def _analyze_current_window(self):
         """Analyze current time window"""
         try:
-            # Get events from last window
+            # Get events from last window (includes screenshots)
             events = self.collector.get_all_events(
                 window_seconds=self.analysis_interval
             )
             
-            # Extract features
-            features = self.extractor.extract_features(events)
+            # Get screenshots for visual analysis
+            screenshots = events.get('screenshots', [])
             
-            # Detect fake work
-            report = self.detector.generate_report(features, user_id=self.user_id)
+            # Check minimum activity before analysis (reduces false positives)
+            from src.utils.config import MIN_ACTIVITY_FOR_ANALYSIS
+            total_events = (
+                len(events.get('keyboard', [])) + 
+                len(events.get('mouse', [])) + 
+                len(events.get('window', []))
+            )
+            
+            if total_events < MIN_ACTIVITY_FOR_ANALYSIS:
+                logger.debug(f"Skipping analysis - insufficient activity ({total_events} events)")
+                return
+            
+            # Generate report using ML detector (includes visual features)
+            report = self.detector.generate_report(
+                events=events,
+                screenshots=screenshots,
+                user_id=self.user_id
+            )
             
             # Update statistics
             self.total_analyses += 1

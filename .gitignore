@@ -40,10 +40,12 @@ logs/
 
 # Data
 data/raw/*.json
+data/reports/*.json
 data/raw/*.csv
 data/processed/*.csv
 data/models/*.joblib
 data/models/*.pkl
+data/models/*.h5
 
 # Keep directory structure
 !data/.gitkeep

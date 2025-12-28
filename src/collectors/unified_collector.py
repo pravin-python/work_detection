@@ -12,6 +12,7 @@ from pathlib import Path
 from .keyboard_collector import KeyboardCollector
 from .mouse_collector import MouseCollector
 from .window_collector import WindowCollector
+from .screenshot_collector import ScreenshotCollector
 from ..utils.logger import setup_logger
 from ..utils.config import (
     LOG_LEVEL, LOG_FILE, COLLECTION_WINDOW_SECONDS,
@@ -29,6 +30,7 @@ class UnifiedCollector:
         self.keyboard_collector = KeyboardCollector()
         self.mouse_collector = MouseCollector()
         self.window_collector = WindowCollector()
+        self.screenshot_collector = ScreenshotCollector(random_interval=True, min_interval=30, max_interval=90)
         self.start_time = None
         
         logger.info("UnifiedCollector initialized")
@@ -39,6 +41,7 @@ class UnifiedCollector:
         self.keyboard_collector.start()
         self.mouse_collector.start()
         self.window_collector.start()
+        self.screenshot_collector.start()
         self.start_time = datetime.now()
         logger.info("All collectors started successfully")
     
@@ -48,6 +51,7 @@ class UnifiedCollector:
         self.keyboard_collector.stop()
         self.mouse_collector.stop()
         self.window_collector.stop()
+        self.screenshot_collector.stop()
         logger.info("All collectors stopped successfully")
     
     def get_all_events(self, window_seconds: int = None, clear: bool = False) -> Dict[str, List[Dict[str, Any]]]:
@@ -70,10 +74,14 @@ class UnifiedCollector:
             mouse_events = self.mouse_collector.get_events(clear=clear)
             window_events = self.window_collector.get_events(clear=clear)
         
+        # Get screenshots
+        screenshots = self.screenshot_collector.get_screenshots()
+        
         return {
             'keyboard': keyboard_events,
             'mouse': mouse_events,
             'window': window_events,
+            'screenshots': screenshots,
             'metadata': {
                 'collection_start': self.start_time.isoformat() if self.start_time else None,
                 'retrieval_time': datetime.now().isoformat(),
